@@ -52,10 +52,9 @@
     </div>
 
     <script>
-        // Use an empty string for the API Key if the user hasn't provided one.
-        // The execution environment will handle injection.
-        const apiKey = ""; 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        // The frontend no longer needs the API key or the complex API URL.
+        // It now calls the Vercel serverless function (the proxy).
+        const PROXY_URL = '/api/generate'; 
 
         const generateButton = document.getElementById('generate-button');
         const loadingIndicator = document.getElementById('loading-indicator');
@@ -63,13 +62,12 @@
         const recipeContentElement = document.getElementById('recipe-content');
         const sourcesArea = document.getElementById('sources-area');
         const sourcesList = document.getElementById('sources-list');
-        const cuisineInput = document.getElementById('cuisine-input'); // New input element
+        const cuisineInput = document.getElementById('cuisine-input');
 
         generateButton.addEventListener('click', generateRecipe);
 
         /**
          * Converts the markdown response into basic HTML structure for display.
-         * Note: This is a simple conversion and does not support full markdown features.
          */
         function formatMarkdownToHtml(markdown) {
             // Remove dollar signs (e.g., "$1 cup" becomes "1 cup")
@@ -83,7 +81,7 @@
 
             // Replace * lists with <ul><li>
             html = html.replace(/^\*\s(.*?)$/gm, '<li>$1</li>');
-            html = `<ul>${html}</ul>`; // Wrap list items in ul tag
+            html = `<ul>${html}</ul>`; 
 
             // Replace newlines with paragraph breaks, but only outside list structures
             html = html.split('\n').map(line => {
@@ -101,7 +99,7 @@
 
 
         /**
-         * Main function to call the Gemini API for recipe generation.
+         * Main function to call the Vercel Proxy for recipe generation.
          */
         async function generateRecipe() {
             // UI state management
@@ -115,43 +113,32 @@
             // Get user input for cuisine
             const cuisine = cuisineInput.value.trim() || "a quick and healthy dinner";
             
-            // Construct the dynamic query
-            const userQuery = `Give me a detailed recipe idea for **${cuisine}** that serves two people. Include the title, an ingredient list, and easy instructions.`;
+            // Payload only needs the variable info for the proxy
+            const payload = { cuisine };
             
-            const systemPrompt = "You are a friendly and highly creative world-class chef. You specialize in generating clear, concise, and delicious recipes. Always format your output using markdown headings and bullet points for readability. Do not include any introductory or concluding chatter, only the recipe.";
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                // Enable Google Search for grounding to get fresh recipe ideas
-                tools: [{ "google_search": {} }],
-                systemInstruction: {
-                    parts: [{ text: systemPrompt }]
-                },
-                config: {
-                    temperature: 0.8 // A bit of creativity for new recipes
-                }
-            };
-
             const maxRetries = 3;
             for (let i = 0; i < maxRetries; i++) {
                 try {
-                    const response = await fetch(apiUrl, {
+                    // Call the secure proxy endpoint
+                    const response = await fetch(PROXY_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
 
                     if (!response.ok) {
-                        throw new Error(`API call failed with status: ${response.status}`);
+                        const errorData = await response.json();
+                        throw new Error(`Proxy call failed: ${errorData.error || response.statusText}`);
                     }
 
+                    // The result is the raw response from the Gemini API
                     const result = await response.json();
                     const candidate = result.candidates?.[0];
 
                     if (candidate && candidate.content?.parts?.[0]?.text) {
                         const markdownText = candidate.content.parts[0].text;
                         
-                        // 1. Extract the Title (assuming the first line is the title, before a newline)
+                        // 1. Extract the Title
                         const lines = markdownText.split('\n');
                         const titleLine = lines.find(line => line.startsWith('#'));
                         
@@ -205,7 +192,7 @@
                         // Last attempt failed
                         recipeTitleElement.textContent = "Error Generating Recipe";
                         recipeTitleElement.classList.remove('hidden');
-                        recipeContentElement.innerHTML = '<p class="text-red-500">I apologize, but I ran into an issue fetching the recipe. Please try again!</p>';
+                        recipeContentElement.innerHTML = `<p class="text-red-500">I apologize, but I ran into an issue fetching the recipe. This is usually due to a missing or incorrect API key on the server. Please check your Vercel Environment Variables.</p>`;
                     }
                 }
             }
