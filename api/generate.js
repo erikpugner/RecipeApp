@@ -34,7 +34,8 @@ export default async function handler(request, response) {
         systemInstruction: {
             parts: [{ text: systemPrompt }]
         },
-        config: {
+        // FIX: Renamed 'config' to 'generationConfig' to match the Gemini REST API structure.
+        generationConfig: {
             temperature: 0.8
         }
     };
@@ -46,13 +47,17 @@ export default async function handler(request, response) {
             body: JSON.stringify(payload)
         });
 
-        // Forward the API response back to the frontend
+        // --- IMPROVEMENT HERE: Capture more specific error details ---
         const data = await geminiResponse.json();
         
         if (!geminiResponse.ok) {
-            // Log the error details and send a generic failure message
-            console.error("Gemini API error:", data);
-            return response.status(geminiResponse.status).send({ error: 'Failed to fetch recipe from Gemini API.' });
+            // Log the error details and send a slightly more detailed failure message
+            console.error("Gemini API Status:", geminiResponse.status, "Error Details:", data);
+            
+            // Try to extract an actual error message if it exists in the response
+            const errorMessage = data.error?.message || `Failed with status ${geminiResponse.status}.`;
+            
+            return response.status(geminiResponse.status).send({ error: `Gemini API Call Failed: ${errorMessage}` });
         }
 
         response.status(200).json(data);
